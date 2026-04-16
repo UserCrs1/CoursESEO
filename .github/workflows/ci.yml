@@ -1,0 +1,50 @@
+name: Pipeline CI/CD
+on:
+  push:
+    branches:
+      - '**' 
+jobs:
+  run_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Configurer Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Installer les dépendances
+        run: pip install -r requirements.txt
+
+      - name: Lancer les tests
+        run: pytest
+
+  build_image:
+    needs: run_tests
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    permissions:
+      packages: write
+      contents: read
+      
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Connexion au registre GitHub
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build et Push de l'image
+        run: |
+          # Docker exige des noms en minuscules, on convertit le nom du dépôt au cas où
+          REPO_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_TAG="ghcr.io/$REPO_NAME/ma-vache:latest"
+          
+          # Build de l'image
+          docker build -t $IMAGE_TAG .
+          
+          # Envoi sur GitHub Packages
+          docker push $IMAGE_TAG
